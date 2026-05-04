@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KNN Product Recommender</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+
+  <!-- ─── HEADER ─── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo-block">
+        <span class="logo-icon">◈</span>
+        <span class="logo-text">Proxima<em>Rec</em></span>
+      </div>
+      <div class="header-meta">
+        <span class="badge">KNN · scikit-learn</span>
+        <span class="header-sub">{{ total_products or 18 }} products indexed</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─── HERO ─── -->
+  <section class="hero">
+    <div class="hero-inner">
+      <p class="hero-eyebrow">Machine Learning · Recommendation Engine</p>
+      <h1 class="hero-title">
+        Find products that <em>match</em><br/>your preferences.
+      </h1>
+      <p class="hero-sub">
+        K-Nearest Neighbors computes Euclidean distance across price, rating,
+        category, popularity, and discount to surface the most geometrically
+        similar products to your preferences.
+      </p>
+    </div>
+    <!-- decorative grid lines -->
+    <div class="hero-grid" aria-hidden="true">
+      <div class="grid-line"></div><div class="grid-line"></div>
+      <div class="grid-line"></div><div class="grid-line"></div>
+    </div>
+  </section>
+
+  <!-- ─── MAIN LAYOUT ─── -->
+  <main class="layout">
+
+    <!-- ── FORM PANEL ── -->
+    <aside class="form-panel">
+      <div class="panel-header">
+        <span class="panel-number">01</span>
+        <h2 class="panel-title">Your Preferences</h2>
+      </div>
+
+      <form action="/recommend" method="POST" class="pref-form" id="pref-form">
+
+        <!-- Max Price -->
+        <div class="field-group">
+          <label class="field-label" for="max_price">
+            Max Budget
+            <span class="field-hint">USD</span>
+          </label>
+          <div class="input-row">
+            <span class="input-prefix">$</span>
+            <input
+              type="number" id="max_price" name="max_price"
+              min="5" max="2000" step="5"
+              value="{{ prefs.max_price if prefs else 300 }}"
+              class="field-input" required
+            />
+          </div>
+          <input type="range" class="slider" id="price_slider"
+                 min="5" max="2000" step="5"
+                 value="{{ prefs.max_price if prefs else 300 }}"
+                 oninput="document.getElementById('max_price').value=this.value" />
+          <div class="slider-labels"><span>$5</span><span>$2000</span></div>
+        </div>
+
+        <!-- Min Rating -->
+        <div class="field-group">
+          <label class="field-label" for="min_rating">
+            Minimum Rating
+            <span class="field-hint">out of 5</span>
+          </label>
+          <select id="min_rating" name="min_rating" class="field-select">
+            {% for r in ["3.0","3.5","4.0","4.2","4.5","4.7"] %}
+              <option value="{{ r }}"
+                {% if prefs and prefs.min_rating == r %}selected{% endif %}
+                {% if not prefs and r == "4.0" %}selected{% endif %}>
+                ★ {{ r }}+
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Category -->
+        <div class="field-group">
+          <label class="field-label" for="category">
+            Category
+            <span class="field-hint">optional</span>
+          </label>
+          <select id="category" name="category" class="field-select">
+            <option value="">— All categories —</option>
+            {% for cat in categories %}
+              <option value="{{ cat }}"
+                {% if prefs and prefs.category == cat %}selected{% endif %}>
+                {{ cat }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Min Popularity -->
+        <div class="field-group">
+          <label class="field-label" for="min_popularity">
+            Min Popularity Score
+            <span class="field-hint">0 – 100</span>
+          </label>
+          <input
+            type="number" id="min_popularity" name="min_popularity"
+            min="0" max="100" step="5"
+            value="{{ prefs.min_popularity if prefs else 70 }}"
+            class="field-input"
+          />
+          <input type="range" class="slider" min="0" max="100" step="5"
+                 value="{{ prefs.min_popularity if prefs else 70 }}"
+                 oninput="document.getElementById('min_popularity').value=this.value" />
+          <div class="slider-labels"><span>0</span><span>100</span></div>
+        </div>
+
+        <!-- Min Discount -->
+        <div class="field-group">
+          <label class="field-label" for="min_discount">
+            Minimum Discount
+            <span class="field-hint">%</span>
+          </label>
+          <input
+            type="number" id="min_discount" name="min_discount"
+            min="0" max="80" step="5"
+            value="{{ prefs.min_discount if prefs else 0 }}"
+            class="field-input"
+          />
+        </div>
+
+        <!-- Number of results -->
+        <div class="field-group">
+          <label class="field-label" for="n_results">
+            Results to Return
+            <span class="field-hint">1 – 10</span>
+          </label>
+          <div class="radio-group">
+            {% for n in [3, 5, 8, 10] %}
+            <label class="radio-pill">
+              <input type="radio" name="n_results" value="{{ n }}"
+                {% if prefs and prefs.n_results|int == n %}checked
+                {% elif not prefs and n == 5 %}checked{% endif %} />
+              <span>{{ n }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn">
+          <span class="btn-icon">⬡</span>
+          Run KNN Search
+        </button>
+
+      </form>
+
+      <!-- Algorithm info card -->
+      <div class="algo-card">
+        <h3 class="algo-title">How it works</h3>
+        <ol class="algo-steps">
+          <li>Your prefs → <code>feature vector</code></li>
+          <li>MinMax-scaled to <code>[0, 1]</code></li>
+          <li>KNN finds <em>K nearest neighbors</em> by Euclidean distance</li>
+          <li>Distance → similarity score <code>(1 − d) × 100</code></li>
+          <li>Hard filters applied post-query</li>
+        </ol>
+        <p class="algo-note">Features: price · rating · category · popularity · discount</p>
+      </div>
+    </aside>
+
+    <!-- ── RESULTS PANEL ── -->
+    <section class="results-panel">
+      <div class="panel-header">
+        <span class="panel-number">02</span>
+        <h2 class="panel-title">
+          {% if recommendations %}
+            {{ recommendations|length }} Recommendation{{ 's' if recommendations|length != 1 }}
+          {% elif error %}
+            Error
+          {% else %}
+            Recommendations
+          {% endif %}
+        </h2>
+        {% if recommendations %}
+        <span class="result-meta">Sorted by KNN similarity ↓</span>
+        {% endif %}
+      </div>
+
+      <!-- Error state -->
+      {% if error %}
+      <div class="state-error">
+        <span class="state-icon">⚠</span>
+        <p>{{ error }}</p>
+      </div>
+
+      <!-- Empty / initial state -->
+      {% elif not recommendations %}
+      <div class="state-empty">
+        <div class="empty-visual" aria-hidden="true">
+          <div class="orbit">
+            <div class="orbit-dot d1"></div>
+            <div class="orbit-dot d2"></div>
+            <div class="orbit-dot d3"></div>
+          </div>
+          <span class="empty-center">KNN</span>
+        </div>
+        <p class="empty-text">Set your preferences and run a search to discover products closest to you in feature space.</p>
+      </div>
+
+      <!-- Results grid -->
+      {% else %}
+      <div class="results-grid">
+        {% for product in recommendations %}
+        <article class="product-card" style="--rank: {{ loop.index }}">
+          <div class="card-rank">#{{ loop.index }}</div>
+
+          <div class="card-top">
+            <span class="card-icon">{{ product.image_icon }}</span>
+            <div class="card-badges">
+              <span class="cat-badge">{{ product.category }}</span>
+              {% if product.discount > 0 %}
+              <span class="discount-badge">−{{ product.discount }}%</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <h3 class="card-name">{{ product.name }}</h3>
+          <p class="card-desc">{{ product.description }}</p>
+
+          <div class="card-stats">
+            <div class="stat">
+              <span class="stat-label">Price</span>
+              <span class="stat-value price">${{ "%.2f"|format(product.price) }}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Rating</span>
+              <span class="stat-value">★ {{ product.rating }}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Popularity</span>
+              <span class="stat-value">{{ product.popularity }}/100</span>
+            </div>
+          </div>
+
+          <!-- Similarity bar -->
+          <div class="similarity-block">
+            <div class="sim-header">
+              <span class="sim-label">KNN Similarity</span>
+              <span class="sim-score">{{ product.similarity }}%</span>
+            </div>
+            <div class="sim-bar-track">
+              <div class="sim-bar-fill" style="--pct: {{ product.similarity }}%"></div>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+  </main>
+
+  <!-- ─── FOOTER ─── -->
+  <footer class="site-footer">
+    <p>ProximaRec · KNN Recommendation Engine · Built with Flask + scikit-learn</p>
+    <p class="footer-sub">K = 6 · Metric: Euclidean · Scaling: MinMaxScaler</p>
+  </footer>
+
+  <script>
+    // Sync price slider ↔ number input
+    const priceInput = document.getElementById('max_price');
+    const priceSlider = document.getElementById('price_slider');
+    if (priceInput && priceSlider) {
+      priceInput.addEventListener('input', () => { priceSlider.value = priceInput.value; });
+    }
+
+    // Staggered card entrance
+    document.querySelectorAll('.product-card').forEach((card, i) => {
+      card.style.animationDelay = (i * 0.08) + 's';
+    });
+
+    // Animate similarity bars after load
+    window.addEventListener('load', () => {
+      document.querySelectorAll('.sim-bar-fill').forEach(bar => {
+        bar.style.transition = 'width 0.8s cubic-bezier(0.16,1,0.3,1)';
+      });
+    });
+  </script>
+
+</body>
+</html>
